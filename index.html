@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Keylock — Cybersecurity Terms</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1f2630;
+    --border: #2d3640;
+    --text: #e6edf3;
+    --muted: #8b98a5;
+    --brass: #d4a845;
+    --brass-dark: #8a6a1f;
+    --green: #3fb950;
+    --red: #f85149;
+    --hint: #58d5ff;
+    --radius: 12px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: radial-gradient(ellipse at top, #18202b 0%, var(--bg) 60%);
+    background-color: var(--bg);
+    color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    min-height: 100vh;
+  }
+
+  /* ---------- Header / HUD ---------- */
+  header {
+    position: sticky; top: 0; z-index: 10;
+    background: rgba(13, 17, 23, 0.92);
+    backdrop-filter: blur(6px);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 16px;
+  }
+  .hud {
+    max-width: 1200px; margin: 0 auto;
+    display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px;
+  }
+  .logo { font-size: 1.4rem; font-weight: 800; letter-spacing: 0.04em; margin-right: auto; }
+  .logo span { color: var(--brass); }
+  .stat { font-size: 0.9rem; color: var(--muted); }
+  .stat b { color: var(--text); font-variant-numeric: tabular-nums; }
+  .progress {
+    flex-basis: 100%; height: 6px; background: var(--panel-2);
+    border-radius: 99px; overflow: hidden; order: 10;
+  }
+  .progress > div { height: 100%; width: 0; background: linear-gradient(90deg, var(--brass), var(--green)); transition: width 0.4s ease; }
+
+  button {
+    font: inherit; cursor: pointer; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--panel-2); color: var(--text);
+    padding: 8px 14px; transition: background 0.15s, border-color 0.15s, transform 0.1s;
+  }
+  button:hover:not(:disabled) { border-color: var(--muted); }
+  button:active:not(:disabled) { transform: translateY(1px); }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .hint-btn { display: inline-flex; align-items: center; gap: 8px; border-color: #2a5a6b; }
+  .hint-btn .pips { display: inline-flex; gap: 4px; }
+  .hint-btn .pip { width: 9px; height: 9px; border-radius: 50%; background: var(--hint); box-shadow: 0 0 6px var(--hint); }
+  .hint-btn .pip.used { background: var(--panel); box-shadow: none; border: 1px solid var(--border); }
+  .hint-btn.active { background: #12333f; border-color: var(--hint); box-shadow: 0 0 0 2px rgba(88, 213, 255, 0.25); }
+
+  .banner {
+    max-width: 1200px; margin: 0 auto; padding: 0 16px;
+    min-height: 1.4em; text-align: center; font-size: 0.95rem; color: var(--muted);
+    margin-top: 14px;
+  }
+  .banner.good { color: var(--green); }
+  .banner.bad { color: var(--red); }
+  .banner.hint { color: var(--hint); }
+
+  /* ---------- Board ---------- */
+  main {
+    max-width: 1200px; margin: 0 auto; padding: 14px 16px 48px;
+    display: grid; grid-template-columns: 280px 1fr; gap: 20px; align-items: start;
+  }
+  @media (max-width: 760px) {
+    main { grid-template-columns: 1fr; }
+    .keyring { position: sticky; top: 108px; z-index: 5; }
+  }
+  h2 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); margin: 0 0 10px; }
+
+  .keyring {
+    background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 14px; position: sticky; top: 90px;
+  }
+  .keys { display: flex; flex-wrap: wrap; gap: 8px; }
+  @media (max-width: 760px) {
+    .keys { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 6px; }
+  }
+
+  .key {
+    display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0;
+    padding: 8px 12px 8px 8px; border-radius: 99px;
+    background: linear-gradient(180deg, #e7c262, var(--brass) 55%, #b88c2c);
+    color: #2b1f05; font-weight: 700; font-size: 0.88rem;
+    border: 1px solid var(--brass-dark);
+    cursor: grab; user-select: none; -webkit-user-select: none;
+    box-shadow: 0 2px 0 var(--brass-dark), 0 4px 10px rgba(0,0,0,0.35);
+    transition: transform 0.12s, box-shadow 0.12s, opacity 0.2s;
+  }
+  .key:hover { transform: translateY(-2px); }
+  .key svg { width: 26px; height: 14px; flex-shrink: 0; }
+  .key.selected { outline: 3px solid #fff; outline-offset: 2px; transform: translateY(-2px); }
+  .key.dragging { opacity: 0.45; }
+  .key.used { display: none; }
+
+  /* Hint effect: shake + glow for 1.5s */
+  .key.hinted {
+    animation: hintShake 0.5s ease-in-out 3, hintGlow 1.5s ease-in-out 1;
+    position: relative; z-index: 2;
+  }
+  @keyframes hintShake {
+    0%, 100% { transform: translateX(0) rotate(0); }
+    15% { transform: translateX(-5px) rotate(-4deg); }
+    30% { transform: translateX(5px) rotate(4deg); }
+    45% { transform: translateX(-4px) rotate(-3deg); }
+    60% { transform: translateX(4px) rotate(3deg); }
+    75% { transform: translateX(-2px) rotate(-1deg); }
+  }
+  @keyframes hintGlow {
+    0%, 100% { box-shadow: 0 2px 0 var(--brass-dark), 0 0 0 rgba(88,213,255,0); }
+    20%, 80% { box-shadow: 0 2px 0 var(--brass-dark), 0 0 0 3px var(--hint), 0 0 22px 6px rgba(88,213,255,0.85); }
+  }
+
+  .locks { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+  @media (max-width: 400px) { .locks { grid-template-columns: 1fr; } }
+
+  .lock {
+    position: relative; background: var(--panel); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 14px 14px 14px 64px; min-height: 110px;
+    cursor: pointer; transition: border-color 0.15s, background 0.15s, transform 0.15s;
+  }
+  .lock:hover { border-color: #3d4752; }
+  .lock .hole {
+    position: absolute; left: 14px; top: 14px; width: 38px; height: 38px; border-radius: 50%;
+    background: var(--panel-2); border: 2px solid var(--border);
+    display: grid; place-items: center;
+  }
+  .lock .hole svg { width: 16px; height: 22px; }
+  .lock .def { font-size: 0.92rem; line-height: 1.45; margin: 0; }
+  .lock .answer { display: none; }
+
+  .lock.drop-target, .board-selecting .lock:not(.unlocked):hover { border-color: var(--brass); background: #1d1a12; }
+  .board-hinting .lock:not(.unlocked) { border-style: dashed; border-color: #2a5a6b; }
+  .board-hinting .lock:not(.unlocked):hover { border-color: var(--hint); background: #10262e; }
+
+  .lock.wrong { animation: lockShake 0.4s ease; border-color: var(--red); }
+  @keyframes lockShake {
+    0%, 100% { transform: translateX(0); }
+    20% { transform: translateX(-8px); } 40% { transform: translateX(8px); }
+    60% { transform: translateX(-5px); } 80% { transform: translateX(5px); }
+  }
+  .lock .wrong-msg {
+    position: absolute; right: 10px; top: 8px; font-size: 0.75rem; font-weight: 700;
+    color: var(--red); opacity: 0; transition: opacity 0.2s; pointer-events: none;
+  }
+  .lock.wrong .wrong-msg { opacity: 1; }
+
+  .lock.unlocked { cursor: default; border-color: rgba(63,185,80,0.55); background: #13201a; animation: unlockPop 0.45s ease; }
+  .lock.unlocked .hole { border-color: var(--green); background: #173a22; }
+  .lock.unlocked .answer {
+    display: block; margin-top: 10px; padding-top: 10px; border-top: 1px dashed rgba(63,185,80,0.35);
+  }
+  .lock .term { font-weight: 800; color: var(--green); font-size: 0.95rem; margin-bottom: 4px; }
+  .lock .example { font-size: 0.85rem; color: #c3d1dd; line-height: 1.4; }
+  .lock .example::before { content: "⚡ "; }
+  @keyframes unlockPop { 0% { transform: scale(0.97); } 60% { transform: scale(1.02); } 100% { transform: scale(1); } }
+
+  /* ---------- Overlays ---------- */
+  .overlay {
+    position: fixed; inset: 0; z-index: 50; background: rgba(5, 8, 12, 0.78);
+    display: none; place-items: center; padding: 16px;
+  }
+  .overlay.show { display: grid; }
+  .modal {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 16px;
+    padding: 28px 24px; max-width: 460px; width: 100%; text-align: center;
+  }
+  .modal h1 { margin: 0 0 8px; font-size: 1.8rem; }
+  .modal h1 span { color: var(--brass); }
+  .modal p { color: var(--muted); line-height: 1.5; margin: 8px 0; }
+  .modal ul { text-align: left; color: var(--muted); line-height: 1.6; padding-left: 20px; margin: 14px 0; }
+  .modal ul b { color: var(--text); }
+  .modal .primary { background: var(--brass); color: #2b1f05; border-color: var(--brass-dark); font-weight: 800; padding: 10px 22px; margin-top: 10px; }
+  .modal .primary:hover { background: #e2b955; }
+  .results { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin: 18px 0; }
+  .results div { background: var(--panel-2); border-radius: 10px; padding: 10px; }
+  .results b { display: block; font-size: 1.4rem; color: var(--text); }
+  .results span { font-size: 0.75rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="hud">
+    <div class="logo">🔐 KEY<span>LOCK</span></div>
+    <div class="stat">Unlocked <b id="unlocked">0</b>/<b id="total">0</b></div>
+    <div class="stat">Wrong keys <b id="mistakes">0</b></div>
+    <div class="stat">Time <b id="timer">0:00</b></div>
+    <button id="hintBtn" class="hint-btn" title="Use a hint: pick a keyhole and its key will shake and glow">
+      💡 Hint <span class="pips" id="hintPips"></span>
+    </button>
+    <button id="restartBtn">↻ Restart</button>
+    <div class="progress"><div id="progressBar"></div></div>
+  </div>
+</header>
+
+<div class="banner" id="banner">Drag a key onto a keyhole — or tap a key, then tap a keyhole.</div>
+
+<main id="board">
+  <section class="keyring">
+    <h2>Keys</h2>
+    <div class="keys" id="keys"></div>
+  </section>
+  <section>
+    <h2>Keyholes</h2>
+    <div class="locks" id="locks"></div>
+  </section>
+</main>
+
+<div class="overlay show" id="intro">
+  <div class="modal">
+    <h1>🔐 KEY<span>LOCK</span></h1>
+    <p>Every malware term is a <b>key</b>. Every definition is a <b>keyhole</b>. Fit the right key to unlock each one.</p>
+    <ul>
+      <li><b>Drag</b> a key onto a keyhole, or <b>tap</b> a key then a keyhole.</li>
+      <li>Correct keys unlock a <b>real-world example</b>.</li>
+      <li>Wrong keys won't turn — try again.</li>
+      <li>You get <b>3 hints</b>: press 💡 Hint, pick a keyhole, and its key will <b>shake &amp; glow</b>.</li>
+    </ul>
+    <button class="primary" id="startBtn">Start</button>
+  </div>
+</div>
+
+<div class="overlay" id="win">
+  <div class="modal">
+    <h1>🔓 All <span>Unlocked!</span></h1>
+    <p>You matched every term to its definition.</p>
+    <div class="results">
+      <div><b id="rTime">0:00</b><span>Time</span></div>
+      <div><b id="rAcc">100%</b><span>Accuracy</span></div>
+      <div><b id="rMistakes">0</b><span>Wrong keys</span></div>
+      <div><b id="rHints">0</b><span>Hints used</span></div>
+    </div>
+    <button class="primary" id="againBtn">Play again</button>
+  </div>
+</div>
+
+<script>
+const TERMS = [
+  { term: "APT", full: "APT (Advanced Persistent Threat)",
+    def: "A prolonged, targeted cyberattack where an intruder gains network access and stays undetected for a long time — usually backed by nation-states or organized groups.",
+    example: "APT29 (\"Cozy Bear\") — linked to the 2020 SolarWinds supply-chain attack that compromised multiple U.S. government agencies." },
+  { term: "Remote Access Trojan", full: "Remote Access Trojan (RAT)",
+    def: "Malware, often disguised as legitimate software, that gives an attacker remote control of an infected device to spy on, control, or steal from it.",
+    example: "DarkComet — a RAT used in cyberespionage campaigns, including reported surveillance during the Syrian civil war." },
+  { term: "Backdoor", full: "Backdoor",
+    def: "A hidden way to bypass normal authentication and access a system, secretly installed by attackers (or left in by developers) for later re-entry.",
+    example: "SUNBURST (2020) — a backdoor slipped into legitimate SolarWinds Orion software updates." },
+  { term: "Botnet", full: "Botnet",
+    def: "A network of infected computers (\"bots\") remotely controlled by an attacker, typically used for large-scale DDoS or spam without the owners knowing.",
+    example: "Mirai (2016) — hijacked IoT cameras and routers to DDoS a DNS provider, knocking Twitter, Netflix, and Reddit offline." },
+  { term: "Cryptojacker", full: "Cryptojacker",
+    def: "Malware that secretly uses a victim's computing power to mine cryptocurrency, slowing the device and raising power usage.",
+    example: "Coinhive (2018) — a JavaScript miner planted on a hacked LA Times site, mining Monero in visitors' browsers." },
+  { term: "Infostealer", full: "Infostealer",
+    def: "Malware that harvests sensitive data — saved passwords, cookies, card numbers, crypto wallet keys — and sends it back to the attacker.",
+    example: "RedLine Stealer — sold widely on dark web forums to harvest credentials and crypto wallets." },
+  { term: "Keylogger", full: "Keylogger",
+    def: "Software (or hardware) that records every keystroke a user makes, capturing passwords and messages without the victim knowing.",
+    example: "Olympic Vision — used in business email compromise scams against companies in Asia, the Middle East, and Australia." },
+  { term: "Malvertising", full: "Malvertising",
+    def: "Spreading malware through online ads: malicious code injected into legitimate ad networks can infect visitors who simply view or click an ad.",
+    example: "2016 — poisoned ads on the New York Times and BBC redirected visitors to the Angler Exploit Kit." },
+  { term: "Malware", full: "Malware",
+    def: "The umbrella term for any software intentionally designed to cause damage, exploit, or gain unauthorized access to a system.",
+    example: "Stuxnet (2010) — sabotaged Iranian nuclear centrifuges, causing real physical damage." },
+  { term: "Ransomware", full: "Ransomware",
+    def: "Malware that encrypts a victim's files or locks their system, then demands payment (usually crypto) to restore access.",
+    example: "WannaCry (2017) — hit 150+ countries and crippled parts of the UK's NHS." },
+  { term: "Rootkit", full: "Rootkit",
+    def: "Tools that give an attacker privileged (root/admin) access while hiding their own presence and other malware, making detection very hard.",
+    example: "Sony BMG (2005) — music CDs secretly installed a DRM rootkit that attackers later exploited." },
+  { term: "Spyware", full: "Spyware",
+    def: "Software that secretly monitors a user's activity — browsing, messages, location — and sends it to a third party without consent.",
+    example: "Pegasus (NSO Group) — zero-click phone spyware used to surveil journalists, activists, and politicians." },
+  { term: "Trojan Horse", full: "Trojan Horse",
+    def: "Malware disguised as harmless, legitimate software to trick users into installing it, then acting maliciously in the background.",
+    example: "Emotet — began as a banking Trojan, then became a major delivery platform for ransomware." },
+  { term: "Virus", full: "Virus",
+    def: "Malicious code that attaches to legitimate files or programs and spreads when they're run or shared — usually needing user action.",
+    example: "ILOVEYOU (2000) — a fake love-letter email attachment that infected millions of PCs and caused billions in damage." },
+  { term: "Worm", full: "Worm",
+    def: "Self-replicating malware that spreads across networks on its own — no host file or user action needed — often via software vulnerabilities.",
+    example: "Conficker (2008) infected millions of Windows PCs; WannaCry also spread as a worm via the EternalBlue exploit." },
+];
+
+const MAX_HINTS = 3;
+const HINT_MS = 1500;
+
+const KEY_SVG = '<svg viewBox="0 0 26 14" aria-hidden="true"><circle cx="6" cy="7" r="5" fill="none" stroke="#2b1f05" stroke-width="2.2"/><path d="M11 7h14M20 7v4M24 7v3" stroke="#2b1f05" stroke-width="2.2" fill="none" stroke-linecap="round"/></svg>';
+const HOLE_SVG = '<svg viewBox="0 0 16 22" aria-hidden="true"><circle cx="8" cy="6" r="5" fill="#0d1117"/><path d="M5 9h6l2 12H3z" fill="#0d1117"/></svg>';
+const OPEN_SVG = '<svg viewBox="0 0 16 22" aria-hidden="true"><path d="M3 11l3 3 7-8" stroke="#3fb950" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+const $ = (id) => document.getElementById(id);
+const board = $("board"), keysEl = $("keys"), locksEl = $("locks"), banner = $("banner"), hintBtn = $("hintBtn");
+
+let state;
+
+function shuffle(arr) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function newGame() {
+  clearInterval(state && state.timerId);
+  state = {
+    unlocked: 0, mistakes: 0, attempts: 0,
+    hintsLeft: MAX_HINTS, hintMode: false,
+    selectedKey: null, startTime: null, timerId: null,
+  };
+  render();
+  setBanner("Drag a key onto a keyhole — or tap a key, then tap a keyhole.");
+  updateHud();
+  $("timer").textContent = "0:00";
+  $("win").classList.remove("show");
+}
+
+function startTimer() {
+  if (state.startTime) return;
+  state.startTime = Date.now();
+  state.timerId = setInterval(() => { $("timer").textContent = fmtTime(Date.now() - state.startTime); }, 500);
+}
+
+function fmtTime(ms) {
+  const s = Math.floor(ms / 1000);
+  return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
+}
+
+function render() {
+  keysEl.innerHTML = "";
+  locksEl.innerHTML = "";
+
+  shuffle(TERMS.map((t, i) => i)).forEach((i) => {
+    const k = document.createElement("div");
+    k.className = "key";
+    k.draggable = true;
+    k.dataset.id = i;
+    k.tabIndex = 0;
+    k.setAttribute("role", "button");
+    k.innerHTML = KEY_SVG + "<span>" + TERMS[i].term + "</span>";
+    k.addEventListener("dragstart", (e) => {
+      if (state.hintMode) { e.preventDefault(); return; }
+      e.dataTransfer.setData("text/plain", String(i));
+      e.dataTransfer.effectAllowed = "move";
+      k.classList.add("dragging");
+      startTimer();
+    });
+    k.addEventListener("dragend", () => k.classList.remove("dragging"));
+    k.addEventListener("click", () => onKeyClick(i));
+    k.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onKeyClick(i); } });
+    keysEl.appendChild(k);
+  });
+
+  shuffle(TERMS.map((t, i) => i)).forEach((i) => {
+    const l = document.createElement("div");
+    l.className = "lock";
+    l.dataset.id = i;
+    l.tabIndex = 0;
+    l.innerHTML =
+      '<div class="hole">' + HOLE_SVG + '</div>' +
+      '<span class="wrong-msg">✖ Wrong key</span>' +
+      '<p class="def">' + TERMS[i].def + '</p>' +
+      '<div class="answer"><div class="term">' + TERMS[i].full + '</div><div class="example">' + TERMS[i].example + '</div></div>';
+    l.addEventListener("dragover", (e) => {
+      if (l.classList.contains("unlocked")) return;
+      e.preventDefault();
+      l.classList.add("drop-target");
+    });
+    l.addEventListener("dragleave", () => l.classList.remove("drop-target"));
+    l.addEventListener("drop", (e) => {
+      e.preventDefault();
+      l.classList.remove("drop-target");
+      const keyId = Number(e.dataTransfer.getData("text/plain"));
+      if (!Number.isNaN(keyId)) tryKey(keyId, i);
+    });
+    l.addEventListener("click", () => onLockClick(i));
+    l.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onLockClick(i); } });
+    locksEl.appendChild(l);
+  });
+
+  $("total").textContent = TERMS.length;
+}
+
+const keyEl = (id) => keysEl.querySelector('.key[data-id="' + id + '"]');
+const lockEl = (id) => locksEl.querySelector('.lock[data-id="' + id + '"]');
+
+function onKeyClick(id) {
+  if (state.hintMode) { setBanner("Hint mode: pick a KEYHOLE to reveal its key (or press 💡 again to cancel).", "hint"); return; }
+  startTimer();
+  if (state.selectedKey === id) { selectKey(null); return; }
+  selectKey(id);
+}
+
+function selectKey(id) {
+  if (state.selectedKey !== null) { const prev = keyEl(state.selectedKey); prev && prev.classList.remove("selected"); }
+  state.selectedKey = id;
+  board.classList.toggle("board-selecting", id !== null);
+  if (id !== null) {
+    keyEl(id).classList.add("selected");
+    setBanner("Now tap the keyhole for “" + TERMS[id].term + "”.");
+  } else {
+    setBanner("Drag a key onto a keyhole — or tap a key, then tap a keyhole.");
+  }
+}
+
+function onLockClick(lockId) {
+  const l = lockEl(lockId);
+  if (l.classList.contains("unlocked")) return;
+  if (state.hintMode) { useHint(lockId); return; }
+  if (state.selectedKey === null) { setBanner("Pick a key first, then tap a keyhole."); return; }
+  tryKey(state.selectedKey, lockId);
+}
+
+function tryKey(keyId, lockId) {
+  const l = lockEl(lockId);
+  if (l.classList.contains("unlocked")) return;
+  startTimer();
+  state.attempts++;
+
+  if (keyId === lockId) {
+    l.classList.add("unlocked");
+    l.querySelector(".hole").innerHTML = OPEN_SVG;
+    keyEl(keyId).classList.add("used");
+    selectKey(null);
+    state.unlocked++;
+    setBanner("🔓 Unlocked: " + TERMS[keyId].full + "!", "good");
+    updateHud();
+    if (state.unlocked === TERMS.length) finish();
+  } else {
+    state.mistakes++;
+    l.classList.remove("wrong");
+    void l.offsetWidth; // restart animation
+    l.classList.add("wrong");
+    setTimeout(() => l.classList.remove("wrong"), 900);
+    setBanner("✖ “" + TERMS[keyId].term + "” doesn't fit that keyhole. Try another.", "bad");
+    updateHud();
+  }
+}
+
+/* ---------- Hints ---------- */
+function toggleHintMode() {
+  if (state.hintsLeft <= 0 || state.unlocked === TERMS.length) return;
+  state.hintMode = !state.hintMode;
+  if (state.hintMode) {
+    selectKey(null);
+    setBanner("💡 Hint mode: select a KEYHOLE and its matching key will shake and glow.", "hint");
+  } else {
+    setBanner("Hint cancelled.");
+  }
+  updateHud();
+}
+
+function useHint(lockId) {
+  state.hintsLeft--;
+  state.hintMode = false;
+  startTimer();
+  const k = keyEl(lockId);
+  k.classList.remove("hinted");
+  void k.offsetWidth;
+  k.classList.add("hinted");
+  k.scrollIntoView({ block: "nearest", inline: "center", behavior: "smooth" });
+  setTimeout(() => k.classList.remove("hinted"), HINT_MS);
+  setBanner("💡 Watch the glowing key! " + state.hintsLeft + " hint" + (state.hintsLeft === 1 ? "" : "s") + " left.", "hint");
+  updateHud();
+}
+
+/* ---------- HUD ---------- */
+function updateHud() {
+  $("unlocked").textContent = state.unlocked;
+  $("mistakes").textContent = state.mistakes;
+  $("progressBar").style.width = (state.unlocked / TERMS.length * 100) + "%";
+  $("hintPips").innerHTML = Array.from({ length: MAX_HINTS }, (_, i) =>
+    '<span class="pip' + (i < state.hintsLeft ? "" : " used") + '"></span>').join("");
+  hintBtn.disabled = state.hintsLeft <= 0 || state.unlocked === TERMS.length;
+  hintBtn.classList.toggle("active", state.hintMode);
+  board.classList.toggle("board-hinting", state.hintMode);
+}
+
+function setBanner(msg, kind) {
+  banner.textContent = msg;
+  banner.className = "banner" + (kind ? " " + kind : "");
+}
+
+function finish() {
+  clearInterval(state.timerId);
+  const elapsed = Date.now() - state.startTime;
+  $("rTime").textContent = fmtTime(elapsed);
+  $("rAcc").textContent = Math.round(TERMS.length / state.attempts * 100) + "%";
+  $("rMistakes").textContent = state.mistakes;
+  $("rHints").textContent = MAX_HINTS - state.hintsLeft;
+  setTimeout(() => $("win").classList.add("show"), 700);
+}
+
+hintBtn.addEventListener("click", toggleHintMode);
+$("restartBtn").addEventListener("click", newGame);
+$("againBtn").addEventListener("click", newGame);
+$("startBtn").addEventListener("click", () => $("intro").classList.remove("show"));
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape") return;
+  if (state.hintMode) toggleHintMode();
+  else if (state.selectedKey !== null) selectKey(null);
+});
+
+newGame();
+</script>
+</body>
+</html>
