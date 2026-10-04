@@ -61,9 +61,11 @@
   button:disabled { opacity: 0.4; cursor: not-allowed; }
 
   .hint-btn { display: inline-flex; align-items: center; gap: 8px; border-color: #2a5a6b; }
-  .hint-btn .pips { display: inline-flex; gap: 4px; }
-  .hint-btn .pip { width: 9px; height: 9px; border-radius: 50%; background: var(--hint); box-shadow: 0 0 6px var(--hint); }
-  .hint-btn .pip.used { background: var(--panel); box-shadow: none; border: 1px solid var(--border); }
+  .hint-btn .count {
+    min-width: 22px; padding: 1px 7px; border-radius: 99px; font-weight: 800; font-size: 0.85rem;
+    background: var(--hint); color: #06222c; box-shadow: 0 0 8px rgba(88,213,255,0.6);
+    font-variant-numeric: tabular-nums;
+  }
   .hint-btn.active { background: #12333f; border-color: var(--hint); box-shadow: 0 0 0 2px rgba(88, 213, 255, 0.25); }
 
   .banner {
@@ -163,6 +165,19 @@
   }
   .lock.wrong .wrong-msg { opacity: 1; }
 
+  .lock .hint-badge {
+    position: absolute; left: 14px; top: 60px; width: 38px; text-align: center;
+    font-size: 0.7rem; font-weight: 700; color: var(--hint); display: none;
+  }
+  .lock.hinted-1 .hint-badge, .lock.hinted-2 .hint-badge { display: block; }
+  .lock .clue {
+    display: none; margin: 10px 0 0; padding: 8px 10px; border-radius: 8px;
+    background: #10262e; border: 1px solid #2a5a6b; color: #bfeefe; font-size: 0.83rem; line-height: 1.4;
+  }
+  .lock .clue::before { content: "💡 Clue: "; font-weight: 700; color: var(--hint); }
+  .lock.hinted-1 .clue, .lock.hinted-2 .clue { display: block; }
+  .lock.unlocked .clue, .lock.unlocked .hint-badge { display: none; }
+
   .lock.unlocked { cursor: default; border-color: rgba(63,185,80,0.55); background: #13201a; animation: unlockPop 0.45s ease; }
   .lock.unlocked .hole { border-color: var(--green); background: #173a22; }
   .lock.unlocked .answer {
@@ -190,6 +205,11 @@
   .modal ul b { color: var(--text); }
   .modal .primary { background: var(--brass); color: #2b1f05; border-color: var(--brass-dark); font-weight: 800; padding: 10px 22px; margin-top: 10px; }
   .modal .primary:hover { background: #e2b955; }
+  .clue-modal { border-color: #2a5a6b; box-shadow: 0 0 40px rgba(88,213,255,0.15); }
+  .clue-modal h1 { font-size: 1.3rem; color: var(--hint); }
+  .clue-modal .clue-def { font-size: 0.85rem; font-style: italic; border-left: 3px solid var(--border); padding-left: 10px; text-align: left; }
+  .clue-modal .clue-text { color: var(--text); font-size: 1.05rem; text-align: left; }
+  .clue-modal .clue-tip { font-size: 0.8rem; }
   .results { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin: 18px 0; }
   .results div { background: var(--panel-2); border-radius: 10px; padding: 10px; }
   .results b { display: block; font-size: 1.4rem; color: var(--text); }
@@ -204,8 +224,8 @@
     <div class="stat">Unlocked <b id="unlocked">0</b>/<b id="total">0</b></div>
     <div class="stat">Wrong keys <b id="mistakes">0</b></div>
     <div class="stat">Time <b id="timer">0:00</b></div>
-    <button id="hintBtn" class="hint-btn" title="Use a hint: pick a keyhole and its key will shake and glow">
-      💡 Hint <span class="pips" id="hintPips"></span>
+    <button id="hintBtn" class="hint-btn" title="Use a hint on a keyhole: 1st hint = clue, 2nd hint = its key shakes and glows">
+      💡 Hint <span class="count" id="hintCount"></span>
     </button>
     <button id="restartBtn">↻ Restart</button>
     <div class="progress"><div id="progressBar"></div></div>
@@ -233,9 +253,20 @@
       <li><b>Drag</b> a key onto a keyhole, or <b>tap</b> a key then a keyhole.</li>
       <li>Correct keys unlock a <b>real-world example</b>.</li>
       <li>Wrong keys won't turn — try again.</li>
-      <li>You get <b>3 hints</b>: press 💡 Hint, pick a keyhole, and its key will <b>shake &amp; glow</b>.</li>
+      <li>You get <b>8 hints</b>. Press 💡 Hint and pick a keyhole:
+        the <b>1st hint</b> on a keyhole gives a <b>clue</b>; a <b>2nd hint</b> on the same keyhole makes its key <b>shake &amp; glow</b>. Spend them wisely!</li>
     </ul>
     <button class="primary" id="startBtn">Start</button>
+  </div>
+</div>
+
+<div class="overlay" id="clueOverlay">
+  <div class="modal clue-modal" role="dialog" aria-labelledby="clueTitle">
+    <h1 id="clueTitle">💡 Clue</h1>
+    <p class="clue-def" id="clueDef"></p>
+    <p class="clue-text" id="clueText"></p>
+    <p class="clue-tip">Still stuck? A 2nd hint on this keyhole will make its key shake &amp; glow.</p>
+    <button class="primary" id="clueClose">Got it</button>
   </div>
 </div>
 
@@ -257,52 +288,67 @@
 const TERMS = [
   { term: "APT", full: "APT (Advanced Persistent Threat)",
     def: "A prolonged, targeted cyberattack where an intruder gains network access and stays undetected for a long time — usually backed by nation-states or organized groups.",
-    example: "APT29 (\"Cozy Bear\") — linked to the 2020 SolarWinds supply-chain attack that compromised multiple U.S. government agencies." },
+    example: "APT29 (\"Cozy Bear\") — linked to the 2020 SolarWinds supply-chain attack that compromised multiple U.S. government agencies.",
+    clue: "Think long game: a well-funded, patient intruder (often a nation-state crew) that sneaks in and quietly camps out for months. The key's name is a three-letter acronym describing exactly that kind of threat." },
   { term: "Remote Access Trojan", full: "Remote Access Trojan (RAT)",
     def: "Malware, often disguised as legitimate software, that gives an attacker remote control of an infected device to spy on, control, or steal from it.",
-    example: "DarkComet — a RAT used in cyberespionage campaigns, including reported surveillance during the Syrian civil war." },
+    example: "DarkComet — a RAT used in cyberespionage campaigns, including reported surveillance during the Syrian civil war.",
+    clue: "Like the wooden-gift trick from Greek legend, it gets invited in disguised as something harmless. Its specialty is handing the attacker the controls from far away. Bonus: its abbreviation is a rodent." },
   { term: "Backdoor", full: "Backdoor",
     def: "A hidden way to bypass normal authentication and access a system, secretly installed by attackers (or left in by developers) for later re-entry.",
-    example: "SUNBURST (2020) — a backdoor slipped into legitimate SolarWinds Orion software updates." },
+    example: "SUNBURST (2020) — a backdoor slipped into legitimate SolarWinds Orion software updates.",
+    clue: "Picture a house with a locked front entrance, but someone secretly left another way in around the back." },
   { term: "Botnet", full: "Botnet",
     def: "A network of infected computers (\"bots\") remotely controlled by an attacker, typically used for large-scale DDoS or spam without the owners knowing.",
-    example: "Mirai (2016) — hijacked IoT cameras and routers to DDoS a DNS provider, knocking Twitter, Netflix, and Reddit offline." },
+    example: "Mirai (2016) — hijacked IoT cameras and routers to DDoS a DNS provider, knocking Twitter, Netflix, and Reddit offline.",
+    clue: "One infected machine is a lone soldier; thousands taking orders together form an army. The name blends \"robot\" with a word for a web of connections." },
   { term: "Cryptojacker", full: "Cryptojacker",
     def: "Malware that secretly uses a victim's computing power to mine cryptocurrency, slowing the device and raising power usage.",
-    example: "Coinhive (2018) — a JavaScript miner planted on a hacked LA Times site, mining Monero in visitors' browsers." },
+    example: "Coinhive (2018) — a JavaScript miner planted on a hacked LA Times site, mining Monero in visitors' browsers.",
+    clue: "Nothing gets taken from your files. Your processor gets borrowed to make digital coins. Think of what a carjacker does, but to your CPU." },
   { term: "Infostealer", full: "Infostealer",
     def: "Malware that harvests sensitive data — saved passwords, cookies, card numbers, crypto wallet keys — and sends it back to the attacker.",
-    example: "RedLine Stealer — sold widely on dark web forums to harvest credentials and crypto wallets." },
+    example: "RedLine Stealer — sold widely on dark web forums to harvest credentials and crypto wallets.",
+    clue: "A digital pickpocket. It rifles through saved passwords, cookies and wallets, then makes off with the data. The name pairs a word for data with a word for thief." },
   { term: "Keylogger", full: "Keylogger",
     def: "Software (or hardware) that records every keystroke a user makes, capturing passwords and messages without the victim knowing.",
-    example: "Olympic Vision — used in business email compromise scams against companies in Asia, the Middle East, and Australia." },
+    example: "Olympic Vision — used in business email compromise scams against companies in Asia, the Middle East, and Australia.",
+    clue: "Every tap on your keyboard gets written down in a secret diary for the attacker. The name joins what you press with a word for recording." },
   { term: "Malvertising", full: "Malvertising",
     def: "Spreading malware through online ads: malicious code injected into legitimate ad networks can infect visitors who simply view or click an ad.",
-    example: "2016 — poisoned ads on the New York Times and BBC redirected visitors to the Angler Exploit Kit." },
+    example: "2016 — poisoned ads on the New York Times and BBC redirected visitors to the Angler Exploit Kit.",
+    clue: "The danger hides in the banners and sponsored spots on websites you trust. The name blends \"malicious\" with the industry behind those ads." },
   { term: "Malware", full: "Malware",
     def: "The umbrella term for any software intentionally designed to cause damage, exploit, or gain unauthorized access to a system.",
-    example: "Stuxnet (2010) — sabotaged Iranian nuclear centrifuges, causing real physical damage." },
+    example: "Stuxnet (2010) — sabotaged Iranian nuclear centrifuges, causing real physical damage.",
+    clue: "Think category, not species. Every other harmful program on this board falls under this one umbrella word." },
   { term: "Ransomware", full: "Ransomware",
     def: "Malware that encrypts a victim's files or locks their system, then demands payment (usually crypto) to restore access.",
-    example: "WannaCry (2017) — hit 150+ countries and crippled parts of the UK's NHS." },
+    example: "WannaCry (2017) — hit 150+ countries and crippled parts of the UK's NHS.",
+    clue: "Your files are taken hostage, and there's a price for their release, just like a kidnapper's note." },
   { term: "Rootkit", full: "Rootkit",
     def: "Tools that give an attacker privileged (root/admin) access while hiding their own presence and other malware, making detection very hard.",
-    example: "Sony BMG (2005) — music CDs secretly installed a DRM rootkit that attackers later exploited." },
+    example: "Sony BMG (2005) — music CDs secretly installed a DRM rootkit that attackers later exploited.",
+    clue: "It's after the highest level of access, the admin account Unix names after part of a plant, and it arrives as a toolkit that hides its tracks." },
   { term: "Spyware", full: "Spyware",
     def: "Software that secretly monitors a user's activity — browsing, messages, location — and sends it to a third party without consent.",
-    example: "Pegasus (NSO Group) — zero-click phone spyware used to surveil journalists, activists, and politicians." },
+    example: "Pegasus (NSO Group) — zero-click phone spyware used to surveil journalists, activists, and politicians.",
+    clue: "Like a secret agent living in your device, it watches everything you do and reports back to its handler." },
   { term: "Trojan Horse", full: "Trojan Horse",
     def: "Malware disguised as harmless, legitimate software to trick users into installing it, then acting maliciously in the background.",
-    example: "Emotet — began as a banking Trojan, then became a major delivery platform for ransomware." },
+    example: "Emotet — began as a banking Trojan, then became a major delivery platform for ransomware.",
+    clue: "Remember the ancient Greek trick: a giant wooden \"gift\" wheeled through the city gates, with soldiers hidden inside." },
   { term: "Virus", full: "Virus",
     def: "Malicious code that attaches to legitimate files or programs and spreads when they're run or shared — usually needing user action.",
-    example: "ILOVEYOU (2000) — a fake love-letter email attachment that infected millions of PCs and caused billions in damage." },
+    example: "ILOVEYOU (2000) — a fake love-letter email attachment that infected millions of PCs and caused billions in damage.",
+    clue: "Think biology: it needs a host file to survive and spreads when that host is passed around, like catching a cold from a shared cup." },
   { term: "Worm", full: "Worm",
     def: "Self-replicating malware that spreads across networks on its own — no host file or user action needed — often via software vulnerabilities.",
-    example: "Conficker (2008) infected millions of Windows PCs; WannaCry also spread as a worm via the EternalBlue exploit." },
+    example: "Conficker (2008) infected millions of Windows PCs; WannaCry also spread as a worm via the EternalBlue exploit.",
+    clue: "Unlike its cousin that needs a host file, this one wriggles from machine to machine all on its own. Picture a creature burrowing through the network." },
 ];
 
-const MAX_HINTS = 3;
+const MAX_HINTS = 8;
 const HINT_MS = 1500;
 
 const KEY_SVG = '<svg viewBox="0 0 26 14" aria-hidden="true"><circle cx="6" cy="7" r="5" fill="none" stroke="#2b1f05" stroke-width="2.2"/><path d="M11 7h14M20 7v4M24 7v3" stroke="#2b1f05" stroke-width="2.2" fill="none" stroke-linecap="round"/></svg>';
@@ -328,6 +374,7 @@ function newGame() {
   state = {
     unlocked: 0, mistakes: 0, attempts: 0,
     hintsLeft: MAX_HINTS, hintMode: false,
+    hintsOn: {}, // keyhole id -> hints used on it (0, 1 or 2)
     selectedKey: null, startTime: null, timerId: null,
   };
   render();
@@ -335,6 +382,7 @@ function newGame() {
   updateHud();
   $("timer").textContent = "0:00";
   $("win").classList.remove("show");
+  closeClue();
 }
 
 function startTimer() {
@@ -381,7 +429,9 @@ function render() {
     l.innerHTML =
       '<div class="hole">' + HOLE_SVG + '</div>' +
       '<span class="wrong-msg">✖ Wrong key</span>' +
+      '<span class="hint-badge"></span>' +
       '<p class="def">' + TERMS[i].def + '</p>' +
+      '<p class="clue">' + TERMS[i].clue + '</p>' +
       '<div class="answer"><div class="term">' + TERMS[i].full + '</div><div class="example">' + TERMS[i].example + '</div></div>';
     l.addEventListener("dragover", (e) => {
       if (l.classList.contains("unlocked")) return;
@@ -407,7 +457,7 @@ const keyEl = (id) => keysEl.querySelector('.key[data-id="' + id + '"]');
 const lockEl = (id) => locksEl.querySelector('.lock[data-id="' + id + '"]');
 
 function onKeyClick(id) {
-  if (state.hintMode) { setBanner("Hint mode: pick a KEYHOLE to reveal its key (or press 💡 again to cancel).", "hint"); return; }
+  if (state.hintMode) { setBanner("Hint mode: pick a KEYHOLE, not a key (or press 💡 again to cancel).", "hint"); return; }
   startTimer();
   if (state.selectedKey === id) { selectKey(null); return; }
   selectKey(id);
@@ -459,13 +509,15 @@ function tryKey(keyId, lockId) {
   }
 }
 
-/* ---------- Hints ---------- */
+/* ---------- Hints ----------
+   1st hint on a keyhole -> clue pop-up (stays on the card).
+   2nd hint on the same keyhole -> its key shakes and glows. */
 function toggleHintMode() {
   if (state.hintsLeft <= 0 || state.unlocked === TERMS.length) return;
   state.hintMode = !state.hintMode;
   if (state.hintMode) {
     selectKey(null);
-    setBanner("💡 Hint mode: select a KEYHOLE and its matching key will shake and glow.", "hint");
+    setBanner("💡 Hint mode: pick a KEYHOLE. 1st hint = clue, 2nd hint on the same keyhole = its key glows.", "hint");
   } else {
     setBanner("Hint cancelled.");
   }
@@ -473,17 +525,54 @@ function toggleHintMode() {
 }
 
 function useHint(lockId) {
-  state.hintsLeft--;
+  const used = state.hintsOn[lockId] || 0;
   state.hintMode = false;
   startTimer();
-  const k = keyEl(lockId);
+
+  if (used >= 2) {
+    // Already paid for the glow on this keyhole, so replaying it is free.
+    glowKey(lockId);
+    setBanner("💡 You've already used both hints here, so this replay is free. " + hintsLeftText(), "hint");
+    updateHud();
+    return;
+  }
+
+  state.hintsLeft--;
+  state.hintsOn[lockId] = used + 1;
+  const l = lockEl(lockId);
+  l.classList.add("hinted-" + (used + 1));
+  l.querySelector(".hint-badge").textContent = "💡" + (used + 1) + "/2";
+
+  if (used === 0) {
+    showClue(lockId);
+    setBanner("💡 Clue revealed. " + hintsLeftText(), "hint");
+  } else {
+    glowKey(lockId);
+    setBanner("💡 Watch the glowing key! " + hintsLeftText(), "hint");
+  }
+  updateHud();
+}
+
+function hintsLeftText() {
+  return state.hintsLeft + " hint" + (state.hintsLeft === 1 ? "" : "s") + " left.";
+}
+
+function showClue(lockId) {
+  $("clueDef").textContent = TERMS[lockId].def;
+  $("clueText").textContent = TERMS[lockId].clue;
+  $("clueOverlay").classList.add("show");
+  $("clueClose").focus();
+}
+
+function closeClue() { $("clueOverlay").classList.remove("show"); }
+
+function glowKey(id) {
+  const k = keyEl(id);
   k.classList.remove("hinted");
-  void k.offsetWidth;
+  void k.offsetWidth; // restart animation
   k.classList.add("hinted");
   k.scrollIntoView({ block: "nearest", inline: "center", behavior: "smooth" });
   setTimeout(() => k.classList.remove("hinted"), HINT_MS);
-  setBanner("💡 Watch the glowing key! " + state.hintsLeft + " hint" + (state.hintsLeft === 1 ? "" : "s") + " left.", "hint");
-  updateHud();
 }
 
 /* ---------- HUD ---------- */
@@ -491,8 +580,7 @@ function updateHud() {
   $("unlocked").textContent = state.unlocked;
   $("mistakes").textContent = state.mistakes;
   $("progressBar").style.width = (state.unlocked / TERMS.length * 100) + "%";
-  $("hintPips").innerHTML = Array.from({ length: MAX_HINTS }, (_, i) =>
-    '<span class="pip' + (i < state.hintsLeft ? "" : " used") + '"></span>').join("");
+  $("hintCount").textContent = state.hintsLeft;
   hintBtn.disabled = state.hintsLeft <= 0 || state.unlocked === TERMS.length;
   hintBtn.classList.toggle("active", state.hintMode);
   board.classList.toggle("board-hinting", state.hintMode);
@@ -514,12 +602,15 @@ function finish() {
 }
 
 hintBtn.addEventListener("click", toggleHintMode);
+$("clueClose").addEventListener("click", closeClue);
+$("clueOverlay").addEventListener("click", (e) => { if (e.target.id === "clueOverlay") closeClue(); });
 $("restartBtn").addEventListener("click", newGame);
 $("againBtn").addEventListener("click", newGame);
 $("startBtn").addEventListener("click", () => $("intro").classList.remove("show"));
 document.addEventListener("keydown", (e) => {
   if (e.key !== "Escape") return;
-  if (state.hintMode) toggleHintMode();
+  if ($("clueOverlay").classList.contains("show")) closeClue();
+  else if (state.hintMode) toggleHintMode();
   else if (state.selectedKey !== null) selectKey(null);
 });
 
