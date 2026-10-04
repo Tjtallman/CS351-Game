@@ -14,4 +14,4 @@ Open `index.html` in any modern browser — no install or build step.
 ## Versions
 
 - `keylock-v2-clue-hints` (this branch): 8 hints, clue first, then shake & glow.
-- `claude/keylock-hints-shake-glow-85bco5` / tag `v1-shake-glow`: the original 3 hints, where each one makes a key shake & glow.
+- `claude/keylock-hints-shake-glow-85bco5`: the original 3 hints, where each one makes a key shake & glow.
